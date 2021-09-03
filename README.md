@@ -1,5 +1,5 @@
 # Roomba-polyglot
-This is the Roomba Node Server for the ISY Polyglot V2 interface.  
+This is the Roomba Node Server for the ISY Polyglot V3 interface.  
 (c) fahrer16 aka Brian Feeney.  
 MIT license. 
 
@@ -14,8 +14,7 @@ You'll need to use a static IP address for each Roomba or else the connection wo
 The Roomba980-Python Github linked above explains the limitations of connections to Roomba vacuums.  This node server is configured to keep a constant local connection to each vacuum.  Only one location connection is possible but it is still possible to use the app with a cloud connection to the vacuum.  I recommend preventing the Roomba's from reaching the internet though, so that they don't update their firmware automatically to a version not compatible with this node server.
  
 # Installation Instructions:
-1. Add Node Server into Polyglot instance.
-  * Follow instructions here:  https://github.com/Einstein42/udi-polyglotv2/wiki/Creating-a-NodeServer 
+1. Go to the Polyglot store and click "Install" for the Roomba node server.
   
 2. For each vacuum, a configuration item needs to be added to the Polyglot Node Server configuration:
   2.1.  Follow instructions here for obtaining roomba blid and password needed for configuration: https://github.com/NickWaterton/Roomba980-Python
@@ -29,6 +28,7 @@ The Roomba980-Python Github linked above explains the limitations of connections
 1.1.2: Updated requirements file to use forked repository of Roomba980 project.
 1.1.3: Update to account for changes to json reported from i7 series Roombas.
 1.1.4: Updated underlying Roomba980 python project with changes that have been made in base repo.
+2.0.0: Port to run on Polyglot version 3
 
 ## Known Issues:
 1. Commands that allow for a parameter value to be passed don't seem to be present in admin console unless the profile is uploaded twice.  May be an issue with ISY994i (This was developed using version 5.0.10E).

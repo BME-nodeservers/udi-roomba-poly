@@ -4,14 +4,14 @@ This is a NodeServer for Wi-Fi enabled Roomba vacuums by fahrer16 (Brian Feeney)
 Based on template for Polyglot v2 written in Python2/3 by Einstein.42 (James Milne) milne.james@gmail.com
 """
 
-import polyinterface
+import udi_interface
 import sys
 import json
 from threading import Timer
 from roomba import Roomba
 
 
-LOGGER = polyinterface.LOGGER
+LOGGER = udi_interface.LOGGER
 SERVERDATA = json.load(open('server.json'))
 VERSION = SERVERDATA['credits'][0]['version']
 
@@ -52,33 +52,11 @@ ERROR_MESSAGES = {
         18: "Roomba cannot return to the Home Base or starting position."
     }
 
-class Controller(polyinterface.Controller):
-    """
-    The Controller Class is the primary node from an ISY perspective. It is a Superclass
-    of polyinterface.Node so all methods from polyinterface.Node are available to this
-    class as well.
-
-    Class Variables:
-    self.nodes: Dictionary of nodes. Includes the Controller node. Keys are the node addresses
-    self.name: String name of the node
-    self.address: String Address of Node, must be less than 14 characters (ISY limitation)
-    self.polyConfig: Full JSON config dictionary received from Polyglot.
-    self.added: Boolean Confirmed added to ISY as primary node
-
-    Class Methods (not including the Node methods):
-    start(): Once the NodeServer config is received from Polyglot this method is automatically called.
-    addNode(polyinterface.Node): Adds Node to self.nodes and polyglot/ISY. This is called for you
-                                 on the controller itself.
-    delNode(address): Deletes a Node from the self.nodes/polyglot and ISY. Address is the Node's Address
-    longPoll(): Runs every longPoll seconds (set initially in the server.json or default 10 seconds)
-    shortPoll(): Runs every shortPoll seconds (set initially in the server.json or default 30 seconds)
-    query(): Queries and reports ALL drivers for ALL nodes to the ISY.
-    runForever(): Easy way to run forever without maxing your CPU or doing some silly 'time.sleep' nonsense
-                  this joins the underlying queue query thread and just waits for it to terminate
-                  which never happens.
-    """
+#class Controller(udi_interface.Controller):
+class Controller(object):
     def __init__(self, polyglot):
-        super().__init__(polyglot)
+        #super().__init__(polyglot)
+        self.poly = polyglot
         self.name = 'Roomba Bridge'
         self._nodeQueue = []
         self._roombas = {}
@@ -86,11 +64,12 @@ class Controller(polyinterface.Controller):
         _msg = "Connection timer created for roomba controller"
         self.timer = Timer(1,LOGGER.debug,[_msg])
 
-    def start(self):
-        LOGGER.info('Starting Roomba Polyglot v2 NodeServer version {}'.format(VERSION))
+    def start(self, params):
+        LOGGER.info('Starting Roomba Polyglot v3 NodeServer version {}'.format(VERSION))
         self.connectionTime = 5 #TODO: Add configurable time period here
-        self.discover()
+        self.discover(params)
 
+    """ TODO: Move this to each node """
     def shortPoll(self):
         for node in self.nodes:
             self.nodes[node].updateInfo()
@@ -98,6 +77,7 @@ class Controller(polyinterface.Controller):
     def longPoll(self):
         pass
 
+    """ TODO: Move this to each node """
     def query(self):
         for node in self.nodes:
             self.nodes[node].reportDrivers()
@@ -107,7 +87,7 @@ class Controller(polyinterface.Controller):
             LOGGER.debug('Attempting to add %i roombas that have connected', len(self._nodeQueue))
             for _address in self._nodeQueue:
                 try:
-                    if _address in self.nodes:
+                    if self.poly.getNode(_address) is not None:
                         #Node has already been added, take it out of the queue
                         self._nodeQueue.remove(_address)
                         LOGGER.debug('%s already in ISY', _address)
@@ -125,19 +105,19 @@ class Controller(polyinterface.Controller):
                                 LOGGER.debug('Capabilities for %s: Position: %s, CarpetBoost: %s, BinFullDetection: %s', _name, str(_hasPose), str(_hasCarpetBoost), str(_hasBinFullDetect))
                                 if  _hasCarpetBoost:
                                     LOGGER.info('Adding Roomba 980: %s (%s)', _name, _address)
-                                    self.addNode(Roomba980(self, self.address, _address, _name, _roomba))
+                                    self.poly.addNode(Roomba980(poly.self, _address, _address, _name, _roomba))
                                     self._nodeQueue.remove(_address)
                                 elif _hasPose:
                                     LOGGER.info('Adding Series 900 Roomba: %s (%s)', _name, _address)
-                                    self.addNode(Series900Roomba(self, self.address, _address, _name, _roomba))
+                                    self.poly.addNode(Series900Roomba(self.poly, _address, _address, _name, _roomba))
                                     self._nodeQueue.remove(_address)
                                 elif _hasBinFullDetect:
                                     LOGGER.info('Adding Series 800 Roomba: %s (%s)', _name, _address)
-                                    self.addNode(Series800Roomba(self, self.address, _address, _name, _roomba))
+                                    self.poly.addNode(Series800Roomba(self.poly, _address, _address, _name, _roomba))
                                     self._nodeQueue.remove(_address)
                                 else:
                                     LOGGER.info('Adding Base Roomba: %s (%s)', _name, _address)
-                                    self.addNode(BasicRoomba(self, self.address, _address, _name, _roomba))
+                                    self.poly.addNode(BasicRoomba(self.poly, _address, _address, _name, _roomba))
                                     self._nodeQueue.remove(_address)
                             except Exception as ex:
                                 LOGGER.error('Error adding %s after discovery: %s', _name, str(ex))
@@ -152,12 +132,13 @@ class Controller(polyinterface.Controller):
         else:
             LOGGER.debug('No roombas pending addition')
 
-    def discover(self, *args, **kwargs):
+    def discover(self, customParams):
         LOGGER.debug('Beginning Discovery on %s', str(self.name))
+        self.poly.Notices.clear()
         try:
             _items = 0
             self.discoveryTries = 0
-            _params = self.polyConfig['customParams']
+            _params = customParams
             for key,value in _params.items():
                 _key = key.lower()
                 if _key.startswith('vacuum') or _key.startswith('roomba'):
@@ -171,7 +152,8 @@ class Controller(polyinterface.Controller):
                             _name = _value['name']
                             _address = 'rm' + _blid[-10:].lower()
 
-                            if _address not in self.nodes: #Check that node hasn't already been added to ISY
+                            #Check that node hasn't already been added to ISY
+                            if self.poly.getNode(_address) == None:
                                 if _address not in self._nodeQueue: #Check that node hasn't already been added to queue of roombas to be added to ISY
                                     LOGGER.debug('Connecting to %s', _name)
                                     _roomba = Roomba(_ip, _blid, _password, roombaName = _name)
@@ -184,10 +166,13 @@ class Controller(polyinterface.Controller):
                                     LOGGER.debug('%s already pending addition to ISY. Skipping addition.', _name)
                             else:
                                 LOGGER.debug('%s already configured. Skipping addition to ISY.', _name)
+                        else:
+                            _items -= 1
                     except Exception as ex:
                         LOGGER.error('Error with Roomba Connection: %s', str(ex))
             if _items == 0:
                 LOGGER.error('No Roombas are configured in Polyglot.  For each Roomba, add a key starting with "vacuum" and a value containing the IP address, BLID, Password, and Name.  Example: "{"ip":"192.168.3.36", "blid":"6945841021309640","password":":1:1512838259:R0dzOYDrIVQHJFcR","name":"Upstairs Roomba"}".  Note the use of double quotes.  Static IP\'s are strongly recommended.  See here for instructions how to get BLID and Password: "https://github.com/NickWaterton/Roomba980-Python"')
+                self.poly.Notices['cfg'] = 'Please add your Roombas to the custom parameters configuration.'
             elif len(self._nodeQueue) > 0:
                 LOGGER.info('%i Roomba\'s identified in configuration', _items)
                 self._startRoombaConnectionDelayTimer()
@@ -230,18 +215,21 @@ class Controller(polyinterface.Controller):
     drivers = [{'driver': 'ST', 'value': 0, 'uom': 2}]
 
 
-class BasicRoomba(polyinterface.Node):
+class BasicRoomba(udi_interface.Node):
     """
     This is the Base Class for all Roombas as all Roomba's contain the features within.  Other Roomba's build upon these features.
     """
-    def __init__(self, parent, primary, address, name, roomba):
-        super().__init__(parent, primary, address, name)
+    def __init__(self, poly, primary, address, name, roomba):
+        super().__init__(poly, primary, address, name)
         self.roomba = roomba
         self.quality = -1
         self.connected = False
 
+        poly.subscribe(poly.START, self.start, address)
+        poly.subscribe(poly.POLL, self.updateInfo)
+
     def start(self):
-        self.updateInfo()
+        self.updateInfo(polltype='shortPoll')
 
     def setOn(self, command):
         #Roomba Start Command (not to be confused with the node start command above)
@@ -374,11 +362,12 @@ class BasicRoomba(polyinterface.Node):
         except Exception as ex:
             LOGGER.error("Error attempting to stop communication to %s: %s", self.name, str(ex))
 
-    def updateInfo(self):
-        self._updateBasicProperties()
+    def updateInfo(self, polltype):
+        if polltype is 'shortPoll':
+            self._updateBasicProperties()
 
     def query(self, command=None):
-        self.updateInfo()
+        self.updateInfo(polltype='shortPoll')
         self.reportDrivers()
 
 
@@ -438,8 +427,8 @@ class Series800Roomba(BasicRoomba):
         except Exception as ex:
             LOGGER.error("Error updating Behavior on Bin Full Setting on %s: %s", self.name, str(ex))
 
-    def updateInfo(self):
-        super().updateInfo()
+    def updateInfo(self, polltype):
+        super().updateInfo(polltype)
         self._update800SeriesProperties()
 
     def query(self, command=None):
@@ -541,8 +530,8 @@ class Series900Roomba(Series800Roomba):
             LOGGER.error("Error updating Edge Clean Setting on %s: %s", self.name, str(ex))
 
 
-    def updateInfo(self):
-        super().updateInfo()
+    def updateInfo(self, polltype):
+        super().updateInfo(polltype)
         self._update900SeriesProperties()
 
     def query(self, command=None):
@@ -640,8 +629,8 @@ class Roomba980(Series900Roomba):
         except Exception as ex:
             LOGGER.error("Error updating Fan Speed Setting on %s: %s", self.name, str(ex))
 
-    def updateInfo(self):
-        super().updateInfo()
+    def updateInfo(self, polltype):
+        super().updateInfo(polltype)
         self._update980Properties()
 
     def query(self, command=None):
@@ -702,11 +691,26 @@ class Roomba980(Series900Roomba):
                     'DON': setOn, 'DOF': setOff, 'PAUSE': setPause, 'RESUME': setResume, 'DOCK': setDock, 'QUERY':query, 'SET_BIN_FINISH': setBinFinish, 'SET_PASSES': setPasses, 'SET_EDGE_CLEAN': setEdgeClean, 'SET_FAN_SPEED': setFanSpeed
                 }
 
+control = None
+polyglot = None
+
+def handleParameters(params):
+    global control
+
+    control.start(params)
+
 if __name__ == "__main__":
     try:
-        polyglot = polyinterface.Interface('Roomba')
+        polyglot = udi_interface.Interface([])
         polyglot.start()
         control = Controller(polyglot)
-        control.runForever()
+
+        polyglot.subscribe(polyglot.CUSTOMPARAMS, handleParameters)
+        
+        polyglot.ready()
+        polyglot.updateProfile()
+        polyglot.setCustomParamsDoc()
+
+        polyglot.runForever()
     except (KeyboardInterrupt, SystemExit):
         sys.exit(0)
