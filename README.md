@@ -1,6 +1,7 @@
 # Roomba-polyglot
 This is the Roomba Node Server for the ISY Polyglot V3 interface.  
 (c) fahrer16 aka Brian Feeney.  
+(c) Bob Paauwe.
 MIT license. 
 
 This project functions with Roomba WiFi enabled vacuums running version 2 firmware.  Currently, Roomba 980, Roomba 960, Roomba 890, and Roomba 690.
@@ -9,18 +10,20 @@ Roomba vacuums have a local interface reverse-engineered in the following projec
  * https://github.com/koalazak/dorita980
  * https://github.com/NickWaterton/Roomba980-Python
 
-You'll need to use a static IP address for each Roomba or else the connection won't work each time the IP address changes.  Either set a static IP through Roomba app or through router.
+Use of a satic IP address for each Roomba is recommend.  If the Roomba IP address changes, you will need to re-discover if at the new IP address for the node server to continue working.  Either set a static IP through Roomba app or through router.
 
 The Roomba980-Python Github linked above explains the limitations of connections to Roomba vacuums.  This node server is configured to keep a constant local connection to each vacuum.  Only one location connection is possible but it is still possible to use the app with a cloud connection to the vacuum.  I recommend preventing the Roomba's from reaching the internet though, so that they don't update their firmware automatically to a version not compatible with this node server.
  
 # Installation Instructions:
 1. Go to the Polyglot store and click "Install" for the Roomba node server.
+
+The node server will then start the discovery process and for each Roomba found, it will prompt via a notice for you to press and hold the "Home" button on the vacuum to allow the node server to query the password.
+
+Once the vacuums have been discovered, the node server will create nodes for each vacuum found and you will be able to use them within the ISY.
+
+# Re-discovery:
+Should the initial discovery process fail, or if something changes with your Roombas (add new devices, decommission devices, IP address change), you can run the disovery process manually using the "Discover" button from the Polyglot Node Server Details dashboard.
   
-2. For each vacuum, a configuration item needs to be added to the Polyglot Node Server configuration:
-  2.1.  Follow instructions here for obtaining roomba blid and password needed for configuration: https://github.com/NickWaterton/Roomba980-Python
-  2.2.  Use a key starting with "vacuum" (e.g. vacuum1, vacuum2, etc...)
-  2.3.  Key value format: {"ip":"192.168.3.36", "blid":"6945841021309640","password":":1:1512838259:R0dzOYDrIVQHJFcR","name":"Upstairs Roomba"}  Note the use of double quotes
-   
 ## Version History:
 1.0.0: Initial Release
 1.1.0: Only update WiFi strength in ISY if the reported value has changed by more than 15% since the last update
