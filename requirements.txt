@@ -1,3 +1,2 @@
-polyinterface>=2.0.0
+udi_interface>=3.0.24
 six>=1.11.0
-git+git://github.com/fahrer16/Roomba980-Python

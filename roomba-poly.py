@@ -1,19 +1,25 @@
 #!/usr/bin/env python3
 """
-This is a NodeServer for Wi-Fi enabled Roomba vacuums by fahrer16 (Brian Feeney)
-Based on template for Polyglot v2 written in Python2/3 by Einstein.42 (James Milne) milne.james@gmail.com
+This is a NodeServer for Wi-Fi enabled Roomba vacuums.
+
+Originally written for Polyglot v2 by fahrer16 (Brian Feeney)
+
+Updated for Polyglot v3 by Bob Paauwe
 """
 
 import udi_interface
 import sys
 import json
-from threading import Timer
+import socket
+import ssl
+import struct
+import time
+#from threading import Timer
 from roomba import Roomba
 
 
 LOGGER = udi_interface.LOGGER
-SERVERDATA = json.load(open('server.json'))
-VERSION = SERVERDATA['credits'][0]['version']
+Custom = udi_interface.Custom
 
 STATES = {  "charge": 1, #"Charging"
             "new": 2, #"New Mission"
@@ -51,169 +57,6 @@ ERROR_MESSAGES = {
         17: "The cleaning job is incomplete.",
         18: "Roomba cannot return to the Home Base or starting position."
     }
-
-#class Controller(udi_interface.Controller):
-class Controller(object):
-    def __init__(self, polyglot):
-        #super().__init__(polyglot)
-        self.poly = polyglot
-        self.name = 'Roomba Bridge'
-        self._nodeQueue = []
-        self._roombas = {}
-        self.discoveryTries = 0
-        _msg = "Connection timer created for roomba controller"
-        self.timer = Timer(1,LOGGER.debug,[_msg])
-
-    def start(self, params):
-        LOGGER.info('Starting Roomba Polyglot v3 NodeServer version {}'.format(VERSION))
-        self.connectionTime = 5 #TODO: Add configurable time period here
-        self.discover(params)
-
-    """ TODO: Move this to each node """
-    def shortPoll(self):
-        for node in self.nodes:
-            self.nodes[node].updateInfo()
-
-    def longPoll(self):
-        pass
-
-    """ TODO: Move this to each node """
-    def query(self):
-        for node in self.nodes:
-            self.nodes[node].reportDrivers()
-
-    def _addRoombaNodesFromQueue(self):
-        if len(self._nodeQueue) > 0:
-            LOGGER.debug('Attempting to add %i roombas that have connected', len(self._nodeQueue))
-            for _address in self._nodeQueue:
-                try:
-                    if self.poly.getNode(_address) is not None:
-                        #Node has already been added, take it out of the queue
-                        self._nodeQueue.remove(_address)
-                        LOGGER.debug('%s already in ISY', _address)
-                    else:
-                        _roomba = self._roombas[_address]
-                        LOGGER.debug('Processing %s (%s) for addition', _roomba.roombaName, _address)
-                        #Check that info has been received from roomba by checking for the Roomba's capabilities being reported:
-                        if len(_roomba.master_state["state"]["reported"]["cap"]) > 0:
-                            try:
-                                _name = str(_roomba.roombaName)
-                                LOGGER.debug('Getting capabilities from %s', _name)
-                                _hasPose = self._getCapability(_roomba, 'pose')
-                                _hasCarpetBoost = self._getCapability(_roomba, 'carpetBoost')
-                                _hasBinFullDetect = self._getCapability(_roomba, 'binFullDetect')
-                                LOGGER.debug('Capabilities for %s: Position: %s, CarpetBoost: %s, BinFullDetection: %s', _name, str(_hasPose), str(_hasCarpetBoost), str(_hasBinFullDetect))
-                                if  _hasCarpetBoost:
-                                    LOGGER.info('Adding Roomba 980: %s (%s)', _name, _address)
-                                    self.poly.addNode(Roomba980(poly.self, _address, _address, _name, _roomba))
-                                    self._nodeQueue.remove(_address)
-                                elif _hasPose:
-                                    LOGGER.info('Adding Series 900 Roomba: %s (%s)', _name, _address)
-                                    self.poly.addNode(Series900Roomba(self.poly, _address, _address, _name, _roomba))
-                                    self._nodeQueue.remove(_address)
-                                elif _hasBinFullDetect:
-                                    LOGGER.info('Adding Series 800 Roomba: %s (%s)', _name, _address)
-                                    self.poly.addNode(Series800Roomba(self.poly, _address, _address, _name, _roomba))
-                                    self._nodeQueue.remove(_address)
-                                else:
-                                    LOGGER.info('Adding Base Roomba: %s (%s)', _name, _address)
-                                    self.poly.addNode(BasicRoomba(self.poly, _address, _address, _name, _roomba))
-                                    self._nodeQueue.remove(_address)
-                            except Exception as ex:
-                                LOGGER.error('Error adding %s after discovery: %s', _name, str(ex))
-                        else:
-                            LOGGER.debug('Information not yet received for %s', _name)
-                except Exception as ex:
-                    LOGGER.debug('Information not yet received from %s', _roomba.roombaName)
-            if len(self._nodeQueue) > 0 and self.discoveryTries <= 2: #There are still roomba's to add, we'll restart the timer to run this routine again
-                LOGGER.debug('%i roombas are still pending addition', len(self._nodeQueue))
-                self.discoveryTries += 1
-                self._startRoombaConnectionDelayTimer()
-        else:
-            LOGGER.debug('No roombas pending addition')
-
-    def discover(self, customParams):
-        LOGGER.debug('Beginning Discovery on %s', str(self.name))
-        self.poly.Notices.clear()
-        try:
-            _items = 0
-            self.discoveryTries = 0
-            _params = customParams
-            for key,value in _params.items():
-                _key = key.lower()
-                if _key.startswith('vacuum') or _key.startswith('roomba'):
-                    _items += 1
-                    try:
-                        if 'ip' in value and 'blid' in value and 'password' in value and 'name' in value:
-                            _value = json.loads(value)
-                            _ip = _value['ip']
-                            _blid = _value['blid']
-                            _password = _value['password']
-                            _name = _value['name']
-                            _address = 'rm' + _blid[-10:].lower()
-
-                            #Check that node hasn't already been added to ISY
-                            if self.poly.getNode(_address) == None:
-                                if _address not in self._nodeQueue: #Check that node hasn't already been added to queue of roombas to be added to ISY
-                                    LOGGER.debug('Connecting to %s', _name)
-                                    _roomba = Roomba(_ip, _blid, _password, roombaName = _name)
-                                    _roomba.nodeAddress = _address
-                                    _roomba.connect()
-                                    #build a list of the roombas that need to be added.  We'll check them later after it's had a chance to connect
-                                    self._nodeQueue.append(_address)
-                                    self._roombas[_address] = _roomba
-                                else:
-                                    LOGGER.debug('%s already pending addition to ISY. Skipping addition.', _name)
-                            else:
-                                LOGGER.debug('%s already configured. Skipping addition to ISY.', _name)
-                        else:
-                            _items -= 1
-                    except Exception as ex:
-                        LOGGER.error('Error with Roomba Connection: %s', str(ex))
-            if _items == 0:
-                LOGGER.error('No Roombas are configured in Polyglot.  For each Roomba, add a key starting with "vacuum" and a value containing the IP address, BLID, Password, and Name.  Example: "{"ip":"192.168.3.36", "blid":"6945841021309640","password":":1:1512838259:R0dzOYDrIVQHJFcR","name":"Upstairs Roomba"}".  Note the use of double quotes.  Static IP\'s are strongly recommended.  See here for instructions how to get BLID and Password: "https://github.com/NickWaterton/Roomba980-Python"')
-                self.poly.Notices['cfg'] = 'Please add your Roombas to the custom parameters configuration.'
-            elif len(self._nodeQueue) > 0:
-                LOGGER.info('%i Roomba\'s identified in configuration', _items)
-                self._startRoombaConnectionDelayTimer()
-            else:
-                LOGGER.debug('Discovery: No new roombas need to be added to ISY')
-        except Exception as ex:
-            LOGGER.error('Error with Roomba Discovery: %s', str(ex))
-
-    def _startRoombaConnectionDelayTimer(self):
-        try:
-            if self.timer is not None:
-                self.timer.cancel()
-            self.timer = Timer(self.connectionTime, self._addRoombaNodesFromQueue)
-            self.timer.start()
-            LOGGER.debug("Starting roomba connection delay timer for %s seconds", str(self.connectionTime))
-            return True
-        except Exception as ex:
-            LOGGER.error('Error starting roomba connection delay timer: %s', str(ex))
-            return False
-    
-    def _getCapability(self, roomba, capability):
-        #If a capability is not contained within the roomba's master_state, it doesn't have that capability.  Not sure it could ever be set to 0, but this will ensure it is 1 in order to report it has the capability
-        try:
-            return roomba.master_state["state"]["reported"]["cap"][capability] == 1
-        except:
-            return False
-
-    def updateInfo(self):
-        pass #Nothing to update for controller node
-
-    def delete(self):
-        LOGGER.info('Deleting roomba controller node.  Deleting sub-nodes...')
-        for node in self.nodes:
-            if node.address != self.address:
-                self.nodes[node].delete()
-
-
-    id = 'controller'
-    commands = {'DISCOVER': discover}
-    drivers = [{'driver': 'ST', 'value': 0, 'uom': 2}]
-
 
 class BasicRoomba(udi_interface.Node):
     """
@@ -693,23 +536,277 @@ class Roomba980(Series900Roomba):
 
 control = None
 polyglot = None
+robots = []
 
-def handleParameters(params):
-    global control
+def _get_response(sock, roomba_message):
+    try:
+        while True:
+            raw_response, addr = sock.recvfrom(1024)
 
-    control.start(params)
+            LOGGER.debug("Received response: %s, address: %s", raw_response, addr)
+            data = raw_response.decode()
+
+            if data == roomba_message:
+                continue
+
+            json_response = json.loads(data)
+            if "Roomba" in json_response["hostname"] or "iRobot" in json_response["hostname"]:
+                '''
+                return RoombaInfo(
+                        hostname=json_response["hostname"],
+                        robot_name=json_response["robotname"],
+                        ip=json_response["ip"],
+                        mac=json_response["mac"],
+                        firmware=json_response["sw"],
+                        sku=json_response["sku"],
+                        capabilities=json_response["cap"],
+                        )
+                '''
+                return {
+                        'hostname':json_response["hostname"],
+                        'robot_name':json_response["robotname"],
+                        'ip':json_response["ip"],
+                        'mac':json_response["mac"],
+                        'firmware':json_response["sw"],
+                        'sku':json_response["sku"],
+                        'blid': json_response["hostname"].split('-')[1],
+                        'capabilities':json_response["cap"],
+                        }
+
+    except socket.timeout:
+        LOGGER.error("Socket timeout")
+        return None
+
+def discover():
+    global polyglot
+    global robots
+
+    LOGGER.info(f'Attempting to discover Roombas')
+    nw_int = polyglot.getNetworkInterface()
+    udp_bind_address = ""
+    udp_address = nw_int['broadcast']
+    udp_port = 5678
+    roomba_message = "irobotmcs"
+    amount_of_broadcasted_messages = 5
+
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    server_socket.setsockopt(socket.IPPROTO_IP, 23, 1) # HACK 23 = IP_ONESBCAST
+    server_socket.settimeout(5)
+
+    # start server
+    server_socket.bind((udp_bind_address, udp_port))
+    LOGGER.debug(f'Socket server started, ip {udp_bind_address} port {udp_port}')
+
+    # broadcast message and get responses
+    for i in range(amount_of_broadcasted_messages):
+        LOGGER.debug(f'broadcasting to bcast address {udp_address}')
+        server_socket.sendto(roomba_message.encode(), (udp_address, udp_port))
+
+        while True:
+            # get response
+            response = _get_response(server_socket, roomba_message)
+            if response is None:
+                server_socket.close()
+                return 
+
+            robots.append(response)
+            LOGGER.debug(f'Found robot {response["robot_name"]}')
+            LOGGER.debug(response)
+
+def getPassword(robot):
+    global polyglot
+
+    message = bytes.fromhex("f005efcc3b2900")
+    roomba_port = 8883
+
+    polyglot.Notices['passwd'] = f'With the robot, {robot["robot_name"]} at the base station, press and hold the Home button until the wi-fi light flashes'
+
+    """
+    Roomba have to be on Home Base powered on.
+    Press and hold HOME button until you hear series of tones.
+    Release button, Wi-Fi LED should be flashing
+    After that execute get_password method
+    """
+
+    while True:
+        LOGGER.info(f'start password discovery')
+        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server_socket.settimeout(10)
+        ssl_socket = ssl.wrap_socket(
+            server_socket,
+            ssl_version=ssl.PROTOCOL_TLS,
+            ciphers="DEFAULT@SECLEVEL=1",
+        )
+
+        try:
+            LOGGER.info(f'Connecting to {robot["ip"]} on port {roomba_port}')
+            ssl_socket.connect((robot['ip'], roomba_port))
+            ssl_socket.send(message)
+        except Exception as e:
+            LOGGER.error(f'Failed to connect to robot: {e}')
+            ssl_socket.close()
+            continue
+
+        try:
+            LOGGER.info('Waiting for response from robot')
+            response = _get_pw_response(ssl_socket)
+            password = str(response[7:].decode().rstrip("\x00"))
+            if password is not '':
+                robot['password'] = password
+                LOGGER.info(f'Found password {password}')
+                ssl_socket.close()
+                break
+            else:
+                ssl_socket.close()
+                time.sleep(5)
+
+        except Exception as e:
+            LOGGER.error(f'Error: problem getting password: {e}')
+            ssl_socket.close()
+            break
+
+
+
+def _get_pw_response(sock):
+    try:
+        raw_data = b""
+        response_length = 35
+        while True:
+            if len(raw_data) >= response_length + 2:
+                break
+
+            response = sock.recv(1024)
+
+            if len(response) == 0:
+                break
+
+            raw_data += response
+            if len(raw_data) >= 2:
+                response_length = struct.unpack("B", raw_data[1:2])[0]
+        sock.close()
+        return raw_data
+    except socket.timeout:
+        LOGGER.error("Socket timeout")
+        return None
+    except socket.error as e:
+        LOGGER.error("Socket error", e)
+        return None
+
+
+def _getCapability(roomba, capability):
+    '''
+    If a capability is not contained within the roomba's master_state, 
+    it doesn't have that capability.  Not sure it could ever be set to 0,
+    but this will ensure it is 1 in order to report it has the capability
+    '''
+    try:
+        return roomba.master_state["state"]["reported"]["cap"][capability] == 1
+    except:
+        return False
+
+def handleRobotData(data):
+    global customData
+    global robots
+
+    # customData will hold the list of found robots.
+    LOGGER.info(f'Loading saved robots {data}')
+    customData.load(data)
+
+    try:
+        robots = customData['robots']
+        LOGGER.info(f'We have restored the saved robot list')
+    except Exception as e:
+        LOGGER.warn('No robots defined in custom data')
+
+    LOGGER.info('Finished with handleRobotData')
+
+def handleConfigDone():
+    global polyglot
+    global robots
+    '''
+    If we have robots, create the nodes, one for each robot
+    '''
+    if len(robots) == 0:
+        LOGGER.info('No saved robots...')
+        discoverRobots()
+
+    polyglot.Notices.clear()
+    for robot in robots:
+        LOGGER.info(f'Create a new node for {robot["robot_name"]} ...')
+
+        # Create a Roomba object and connect to robot
+        _roomba = Roomba(robot['ip'], robot['blid'], robot['password'], roombaName=robot['robot_name'])
+        _roomba.connect()
+
+        while 'state' not in _roomba.master_state:
+            LOGGER.info(f'Waiting for data to populate {_roomba.master_state}')
+            time.sleep(5)
+
+        # how long after connect do we need to wait for this?
+
+        if len(_roomba.master_state["state"]["reported"]["cap"]) > 0:
+            try:
+                _name = robot['robot_name']
+                _address = 'rm' + robot['blid'][-10:].lower()
+
+                if polyglot.getNode(_address):
+                    LOGGER.info(f'_name already exist, skipping.')
+                    continue
+
+                LOGGER.debug(f'Getting capabilities from {_name}')
+                _hasPos = _getCapability(_roomba, 'pose')
+                _hasCarpetBoost = _getCapability(_roomba, 'carpetBoost')
+                _hasBinFullDetect = _getCapability(_roomba, 'binFullDetect')
+                LOGGER.debug(f'Capabilities: Position: {_hasPos}, CarpetBoost: {_hasCarpetBoost}, BinFullDetection: {_hasBinFullDetect}')
+
+                if  _hasCarpetBoost:
+                    LOGGER.info(f'Adding Roomba 980: {_name} ({_address})')
+                    polyglot.addNode(Roomba980(polyglot, _address, _address, _name, _roomba))
+                elif _hasPos:
+                    LOGGER.info(f'Adding Series 900 Roomba: {_name} ({_address})')
+                    polyglot.addNode(Series900Roomba(polyglot, _address, _address, _name, _roomba))
+                elif _hasBinFullDetect:
+                    LOGGER.info(f'Adding Series 800 Roomba: {_name} ({_address})')
+                    polyglot.addNode(Series800Roomba(polyglot, _address, _address, _name, _roomba))
+                else:
+                    LOGGER.info(f'Adding Base Roomba: {_name} ({_address})')
+                    polyglot.addNode(BasicRoomba(polyglot, _address, _address, _name, _roomba))
+            except Exception as ex:
+                LOGGER.error(f'Error adding {_name} after discovery: {ex}')
+        else:
+            LOGGER.debug(f'Information not yet received for {_name}')
+
+def discoverRobots():
+    global polyglot
+    global robots
+    global customData
+
+    discover()
+
+    for robot in robots:
+        if 'password' not in robot or robot['password'] is '':
+            getPassword(robot)
+
+    customData['robots'] = robots
 
 if __name__ == "__main__":
     try:
         polyglot = udi_interface.Interface([])
         polyglot.start()
+
+        customData = Custom(polyglot, 'customdata')
         control = Controller(polyglot)
 
-        polyglot.subscribe(polyglot.CUSTOMPARAMS, handleParameters)
+        # Add subscriptions for CONFIGDONE and CUSTOMDATA
+        polyglot.subscribe(polyglot.CUSTOMDATA, handleRobotData)
+        polyglot.subscribe(polyglot.CONFIGDONE, handleConfigDone)
+        polyglot.subscribe(polyglot.DISCOVER, discoverRobots)
         
-        polyglot.ready()
         polyglot.updateProfile()
         polyglot.setCustomParamsDoc()
+
+        polyglot.ready()
 
         polyglot.runForever()
     except (KeyboardInterrupt, SystemExit):

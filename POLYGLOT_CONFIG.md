@@ -1,6 +1,10 @@
-### Adding Vacuums
-For each vacuum, a configuration item needs to be added to the Polyglot Node Server configuration:
- *  Follow instructions here for obtaining roomba blid and password needed for configuration: https://github.com/NickWaterton/Roomba980-Python
- *  Use a key starting with "vacuum" (e.g. vacuum1, vacuum2, etc...) or "roomba" (e.g. roomba1, roomba2, etc...)
- *  Key value format: {"ip":"192.168.3.36", "blid":"6945841021309640","password":":1:1512838259:R0dzOYDrIVQHJFcR","name":"Upstairs Roomba"}  Note the use of double quotes
+### Roomba robots are auto discovered
+If no robots are configured when starting, the node server will start the discovery process.
+This will look for Roomba devices on the network. For each device found, you will then have
+to manually put the Roomba in to a mode that allows the node server to query the authentication
+information from the device.  You will be prompted via a notice when this is required.
 
+The discovered Roomba deivces are then saved so that future starts can skip the discovery process.
+
+If you need to re-discover devices, use the "Discover" button in the UI to start the discovery
+process.  This will clear any exising devices and start from an empty list.
