@@ -206,7 +206,7 @@ class BasicRoomba(udi_interface.Node):
             LOGGER.error("Error attempting to stop communication to %s: %s", self.name, str(ex))
 
     def updateInfo(self, polltype):
-        if polltype is 'shortPoll':
+        if polltype == 'shortPoll':
             self._updateBasicProperties()
 
     def query(self, command=None):
@@ -652,7 +652,7 @@ def getPassword(robot):
             LOGGER.info('Waiting for response from robot')
             response = _get_pw_response(ssl_socket)
             password = str(response[7:].decode().rstrip("\x00"))
-            if password is not '':
+            if password != '':
                 robot['password'] = password
                 LOGGER.info(f'Found password {password}')
                 ssl_socket.close()
@@ -785,7 +785,7 @@ def discoverRobots():
     discover()
 
     for robot in robots:
-        if 'password' not in robot or robot['password'] is '':
+        if 'password' not in robot or robot['password'] == '':
             getPassword(robot)
 
     customData['robots'] = robots
