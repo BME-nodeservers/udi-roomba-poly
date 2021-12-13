@@ -9,9 +9,8 @@
   "shortPoll": "5",
   "longPoll": "60",
   "logLevel": "INFO",
-  "disover": true,
+  "discover": true,
   "customParams": {
-	  "ip": ""
   },
   "credits": [
     {
@@ -21,6 +20,7 @@
       "date": "December 13, 2021",
       "source": "https://github.com/BME-Nodeservers/udi-roomba-poly",
       "license": "https://raw.githubusercontent.com/BME-Nodeservers/udi-roomba-poly/master/LICENSE"
+    },
     {
       "title": "Roomba Node Server",
       "author": "Brian Feeney (fahrer16)",
