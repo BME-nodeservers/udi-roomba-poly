@@ -8,6 +8,7 @@ Updated for Polyglot v3 by Bob Paauwe
 """
 
 import udi_interface
+import asyncio
 import sys
 import json
 import socket
@@ -17,9 +18,9 @@ import time
 #from threading import Timer
 from roomba import Roomba
 
-
 LOGGER = udi_interface.LOGGER
 Custom = udi_interface.Custom
+loop = asyncio.get_event_loop()
 
 STATES = {  "charge": 1, #"Charging"
             "new": 2, #"New Mission"
@@ -724,6 +725,7 @@ def handleRobotData(data):
 def handleConfigDone():
     global polyglot
     global robots
+    global loop
     '''
     If we have robots, create the nodes, one for each robot
     '''
@@ -732,16 +734,27 @@ def handleConfigDone():
         discoverRobots()
 
     polyglot.Notices.clear()
+
+    #loop = asyncio.new_event_loop()
+    #asyncio.set_event_loop(loop)
+    loop.run_until_complete(addNodes(robots))
+    loop.run_forever()
+    #await addNodes(robots)
+
+async def addNodes(robots):
+    global polyglot
+    global loop
+
     for robot in robots:
         LOGGER.info(f'Create a new node for {robot["robot_name"]} ...')
 
         # Create a Roomba object and connect to robot
-        _roomba = Roomba(robot['ip'], robot['blid'], robot['password'], roombaName=robot['robot_name'])
-        _roomba.connect()
+        _roomba = Roomba(robot['ip'], robot['blid'], robot['password'], roombaName=robot['robot_name'], log=LOGGER)
+        await _roomba.connect()
 
         while 'state' not in _roomba.master_state:
             LOGGER.info(f'Waiting for data to populate {_roomba.master_state}')
-            time.sleep(5)
+            await asyncio.sleep(5)
 
         # how long after connect do we need to wait for this?
 
@@ -789,6 +802,7 @@ def discoverRobots():
             getPassword(robot)
 
     customData['robots'] = robots
+
 
 if __name__ == "__main__":
     try:
