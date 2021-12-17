@@ -15,12 +15,12 @@ import socket
 import ssl
 import struct
 import time
-#from threading import Timer
+import threading
 from roomba import Roomba
 
 LOGGER = udi_interface.LOGGER
 Custom = udi_interface.Custom
-loop = asyncio.get_event_loop()
+aloop = None
 
 STATES = {  "charge": 1, #"Charging"
             "new": 2, #"New Mission"
@@ -59,6 +59,27 @@ ERROR_MESSAGES = {
         18: "Roomba cannot return to the Home Base or starting position."
     }
 
+class asyncioThread(threading.Thread):
+    """
+    this class manages the asyncio event loop.
+    """
+    def __init__(self, *args, loop=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.loop = loop or asyncio.new_event_loop()
+        self.running = False
+
+    def run(self):
+        self.running = True
+        self.loop.run_forever()
+
+    def run_method(self, method):
+        return asyncio.run_coroutine_threadsafe(method, loop=self.loop)
+
+    def stop(self):
+        self.loop.call_soon_threadsafe(self.loop.stop)
+        self.join()
+        self.running = False
+
 class BasicRoomba(udi_interface.Node):
     """
     This is the Base Class for all Roombas as all Roomba's contain the features within.  Other Roomba's build upon these features.
@@ -74,6 +95,11 @@ class BasicRoomba(udi_interface.Node):
 
     def start(self):
         self.updateInfo(polltype='shortPoll')
+
+    def disconnect(self):
+        LOGGER.info('Attempting to disconnect from Robot')
+        if self.roomba:
+            self.roomba.disconnect()
 
     def setOn(self, command):
         #Roomba Start Command (not to be confused with the node start command above)
@@ -176,7 +202,7 @@ class BasicRoomba(udi_interface.Node):
                 self.setDriver('GV4', _quality)
                 self.quality = _quality
         except Exception as ex:
-            LOGGER.error("Error updating WiFi Signal Strength on %s: %s", self.name, str(ex))
+            LOGGER.error(f"Error updating WiFi Signal Strength on {self.name}: {ex}")
 
         #GV5, Runtime (Hours)
         try:
@@ -537,7 +563,8 @@ class Roomba980(Series900Roomba):
 
 control = None
 polyglot = None
-robots = []
+robots = {}
+configured = False
 
 def _get_response(sock, roomba_message):
     try:
@@ -547,22 +574,12 @@ def _get_response(sock, roomba_message):
             LOGGER.debug("Received response: %s, address: %s", raw_response, addr)
             data = raw_response.decode()
 
+            LOGGER.info(f'Comparing {data} with {roomba_message}')
             if data == roomba_message:
                 continue
 
             json_response = json.loads(data)
             if "Roomba" in json_response["hostname"] or "iRobot" in json_response["hostname"]:
-                '''
-                return RoombaInfo(
-                        hostname=json_response["hostname"],
-                        robot_name=json_response["robotname"],
-                        ip=json_response["ip"],
-                        mac=json_response["mac"],
-                        firmware=json_response["sw"],
-                        sku=json_response["sku"],
-                        capabilities=json_response["cap"],
-                        )
-                '''
                 return {
                         'hostname':json_response["hostname"],
                         'robot_name':json_response["robotname"],
@@ -575,8 +592,13 @@ def _get_response(sock, roomba_message):
                         }
 
     except socket.timeout:
-        LOGGER.error("Socket timeout")
+        #LOGGER.error("Socket timeout")
+        LOGGER.error("Socket timeout while waiting for response")
         return None
+    except Exception as e:
+        LOGGER.error(f'Error while waiting for response {e}')
+        return None
+
 
 def discover():
     global polyglot
@@ -589,11 +611,12 @@ def discover():
     udp_port = 5678
     roomba_message = "irobotmcs"
     amount_of_broadcasted_messages = 5
+    robots = {}
 
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     server_socket.setsockopt(socket.IPPROTO_IP, 23, 1) # HACK 23 = IP_ONESBCAST
-    server_socket.settimeout(5)
+    server_socket.settimeout(7)
 
     # start server
     server_socket.bind((udp_bind_address, udp_port))
@@ -601,19 +624,26 @@ def discover():
 
     # broadcast message and get responses
     for i in range(amount_of_broadcasted_messages):
-        LOGGER.debug(f'broadcasting to bcast address {udp_address}')
-        server_socket.sendto(roomba_message.encode(), (udp_address, udp_port))
+        try:
+            LOGGER.debug(f'broadcasting to bcast address {udp_address}')
+            server_socket.sendto(roomba_message.encode(), (udp_address, udp_port))
 
-        while True:
             # get response
             response = _get_response(server_socket, roomba_message)
-            if response is None:
+            if response is not None:
+                robots[response['ip']] = response
+                LOGGER.debug(f'Found robot {response["robot_name"]}')
+                LOGGER.debug(response)
                 server_socket.close()
-                return 
+                return
 
-            robots.append(response)
-            LOGGER.debug(f'Found robot {response["robot_name"]}')
-            LOGGER.debug(response)
+            time.sleep(1)
+
+        except Exception as e:
+            LOGGER.error(f'Discover error: {e}')
+
+    server_socket.close()
+    LOGGER.error('Failed to discover any Roomba robots')
 
 def getPassword(robot):
     global polyglot
@@ -621,7 +651,7 @@ def getPassword(robot):
     message = bytes.fromhex("f005efcc3b2900")
     roomba_port = 8883
 
-    polyglot.Notices['passwd'] = f'With the robot, {robot["robot_name"]} at the base station, press and hold the Home button until the wi-fi light flashes'
+    polyglot.Notices['passwd'] = f'With the robot {robot["robot_name"]} at the base station, press and hold the Home button until the wi-fi light flashes'
 
     """
     Roomba have to be on Home Base powered on.
@@ -647,6 +677,7 @@ def getPassword(robot):
         except Exception as e:
             LOGGER.error(f'Failed to connect to robot: {e}')
             ssl_socket.close()
+            time.sleep(5)
             continue
 
         try:
@@ -716,37 +747,39 @@ def handleRobotData(data):
 
     try:
         robots = customData['robots']
-        LOGGER.info(f'We have restored the saved robot list')
+        if type(robots) is dict:
+            LOGGER.info(f'We have restored the saved robot list')
+        else:
+            robots = {}
     except Exception as e:
-        LOGGER.warn('No robots defined in custom data')
+        LOGGER.warning('No robots defined in custom data')
 
     LOGGER.info('Finished with handleRobotData')
 
 def handleConfigDone():
     global polyglot
     global robots
-    global loop
-    '''
-    If we have robots, create the nodes, one for each robot
-    '''
-    if len(robots) == 0:
+    global configured
+
+    if len(robots.keys()) == 0:
         LOGGER.info('No saved robots...')
         discoverRobots()
 
     polyglot.Notices.clear()
 
-    #loop = asyncio.new_event_loop()
-    #asyncio.set_event_loop(loop)
-    loop.run_until_complete(addNodes(robots))
-    loop.run_forever()
-    #await addNodes(robots)
+    configured = True
 
 async def addNodes(robots):
     global polyglot
-    global loop
+    global aloop
 
-    for robot in robots:
+    LOGGER.info(f'addNodes: Discovery fround {len(robots)} robots!')
+    for robot in robots.values():
+        polyglot.Notices['setup'] = f'Initializing connection to {robot["robot_name"]}'
         LOGGER.info(f'Create a new node for {robot["robot_name"]} ...')
+
+        _name = robot['robot_name']
+        _address = 'rm' + robot['blid'][-10:].lower()
 
         # Create a Roomba object and connect to robot
         _roomba = Roomba(robot['ip'], robot['blid'], robot['password'], roombaName=robot['robot_name'], log=LOGGER)
@@ -757,13 +790,14 @@ async def addNodes(robots):
             await asyncio.sleep(5)
 
         # how long after connect do we need to wait for this?
+        while 'reported' not in _roomba.master_state['state']:
+            LOGGER.info(f'Waiting for data to populate {_roomba.master_state}')
+            await asyncio.sleep(5)
 
         if len(_roomba.master_state["state"]["reported"]["cap"]) > 0:
             try:
-                _name = robot['robot_name']
-                _address = 'rm' + robot['blid'][-10:].lower()
-
                 if polyglot.getNode(_address):
+                    polyglot.getNode(_address).roomba = _roomba
                     LOGGER.info(f'_name already exist, skipping.')
                     continue
 
@@ -790,19 +824,57 @@ async def addNodes(robots):
         else:
             LOGGER.debug(f'Information not yet received for {_name}')
 
+        polyglot.Notices.clear()
+
 def discoverRobots():
     global polyglot
     global robots
     global customData
+    global configured
+    global aloop
+
+    # make sure we disconnect from the Roomba
+    for node in polyglot.nodes():
+        node.disconnect()
+    configured = False
 
     discover()
 
-    for robot in robots:
+    for robot in robots.values():
         if 'password' not in robot or robot['password'] == '':
             getPassword(robot)
 
     customData['robots'] = robots
 
+async def _start_the_nodes(robots):
+    await addNodes(robots)
+
+def userDiscover():
+    global robots
+    global aloop
+    global configured
+
+    discoverRobots()
+
+    polyglot.Notices.clear()
+
+    if len(robots.keys()) == 0:
+        LOGGER.warning(f'No robots discovered.')
+        return
+
+    configured = True
+    aloop.run_method(addNodes(robots))
+
+async def start():
+    global robots
+    global configured
+
+    LOGGER.info('Roomba node server starting')
+    # make sure configure is done
+    while not configured:
+        time.sleep(5)
+
+    await addNodes(robots)
 
 if __name__ == "__main__":
     try:
@@ -815,13 +887,20 @@ if __name__ == "__main__":
         # Add subscriptions for CONFIGDONE and CUSTOMDATA
         polyglot.subscribe(polyglot.CUSTOMDATA, handleRobotData)
         polyglot.subscribe(polyglot.CONFIGDONE, handleConfigDone)
-        polyglot.subscribe(polyglot.DISCOVER, discoverRobots)
+        polyglot.subscribe(polyglot.DISCOVER, userDiscover)
         
         polyglot.updateProfile()
         polyglot.setCustomParamsDoc()
 
+        # Create a background thread to run the event loop
+        aloop = asyncioThread()
+        aloop.start()
+
         polyglot.ready()
+
+        aloop.run_method(start())
 
         polyglot.runForever()
     except (KeyboardInterrupt, SystemExit):
+        aloop.stop()
         sys.exit(0)
