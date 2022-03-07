@@ -634,8 +634,8 @@ def discover():
                 robots[response['ip']] = response
                 LOGGER.debug(f'Found robot {response["robot_name"]}')
                 LOGGER.debug(response)
-                server_socket.close()
-                return
+                #server_socket.close()
+                #return
 
             time.sleep(1)
 
