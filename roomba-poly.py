@@ -882,7 +882,7 @@ if __name__ == "__main__":
         polyglot.start()
 
         customData = Custom(polyglot, 'customdata')
-        control = Controller(polyglot)
+        #control = Controller(polyglot)
 
         # Add subscriptions for CONFIGDONE and CUSTOMDATA
         polyglot.subscribe(polyglot.CUSTOMDATA, handleRobotData)
