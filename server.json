@@ -16,8 +16,8 @@
     {
       "title": "Roomba Node Server",
       "author": "Bob Paauwe",
-      "version": "2.0.0",
-      "date": "December 13, 2021",
+      "version": "2.0.1",
+      "date": "March 7, 2022",
       "source": "https://github.com/BME-Nodeservers/udi-roomba-poly",
       "license": "https://raw.githubusercontent.com/BME-Nodeservers/udi-roomba-poly/master/LICENSE"
     },
