@@ -1183,16 +1183,22 @@ class Roomba(object):
         and a dict of the json data
         '''
         indent = self.master_indent + 31 #number of spaces to indent json data
+        json_data = {}
 
         try:
             # if it's json data, decode it (use OrderedDict to preserve keys
             # order), else return as is...
-            json_data = json.loads(
-                payload.decode("utf-8").replace(":nan", ":NaN").\
-                replace(":inf", ":Infinity").replace(":-inf", ":-Infinity"))  #removed object_pairs_hook=OrderedDict
+            try:
+                json_data = json.loads(
+                    payload.decode("utf-8").replace(":nan", ":NaN").\
+                    replace(":inf", ":Infinity").replace(":-inf", ":-Infinity"))  #removed object_pairs_hook=OrderedDict
+            except Exception as e:
+                json_data = {}
+
             # if it's not a dictionary, probably just a number
             if not isinstance(json_data, dict):
                 return json_data, dict(json_data)
+
             json_data_string = "\n".join((indent * " ") + i for i in \
                 (json.dumps(json_data, indent = 2)).splitlines())
 
