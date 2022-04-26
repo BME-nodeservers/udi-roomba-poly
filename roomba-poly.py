@@ -661,6 +661,7 @@ class Roombai7(Series900Roomba):
     id = 'roombai7'
     commands = {
                     'DON': setOn, 'DOF': setOff, 'PAUSE': setPause, 'RESUME': setResume, 'DOCK': setDock, 'QUERY':query, 'SET_BIN_FINISH': setBinFinish, 'SET_PASSES': setPasses, 'SET_EDGE_CLEAN': setEdgeClean, 'SET_FAN_SPEED': setFanSpeed
+               }
 
 control = None
 polyglot = None
@@ -984,7 +985,7 @@ async def start():
 if __name__ == "__main__":
     try:
         polyglot = udi_interface.Interface([])
-        polyglot.start('2.0.4')
+        polyglot.start('2.0.5')
 
         customData = Custom(polyglot, 'customdata')
         #control = Controller(polyglot)
