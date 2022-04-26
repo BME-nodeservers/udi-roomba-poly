@@ -561,6 +561,107 @@ class Roomba980(Series900Roomba):
                     'DON': setOn, 'DOF': setOff, 'PAUSE': setPause, 'RESUME': setResume, 'DOCK': setDock, 'QUERY':query, 'SET_BIN_FINISH': setBinFinish, 'SET_PASSES': setPasses, 'SET_EDGE_CLEAN': setEdgeClean, 'SET_FAN_SPEED': setFanSpeed
                 }
 
+class Roombai7(Series900Roomba):
+    """
+    This class builds upon the Series900Roomba class 
+    """
+    def setOn(self, command):
+        #Although method is not different than the BasicRoomba class, this needs to be defined so that it can be specified in "commands" 
+        super().setOn(command)
+
+    def setOff(self, command):
+        #Although method is not different than the BasicRoomba class, this needs to be defined so that it can be specified in "commands" 
+        super().setOff(command)
+
+    def setPause(self, command):
+        #Although method is not different than the BasicRoomba class, this needs to be defined so that it can be specified in "commands" 
+        super().setPause(command)
+
+    def setResume(self, command):
+        #Although method is not different than the BasicRoomba class, this needs to be defined so that it can be specified in "commands" 
+        super().setResume(command)
+
+    def setDock(self, command):
+        #Although method is not different than the BasicRoomba class, this needs to be defined so that it can be specified in "commands" 
+        super().setDock(command)
+
+    def _updatei7Properties(self):
+        #LOGGER.debug('Updating status for Roomba i7 %s', self.name)
+
+        #GV13, Fan Speed Setting (0="", 1=Eco, 2=Automatic, 3=Performance)
+        try:
+            _carpetBoost = self.roomba.master_state["state"]["reported"]["carpetBoost"]
+            _vacHigh = self.roomba.master_state["state"]["reported"]["vacHigh"]
+            if _carpetBoost:
+                self.setDriver('GV13', 2)
+            elif _vacHigh:
+                self.setDriver('GV13', 3)
+            else:
+                self.setDriver('GV13', 1)
+        except Exception as ex:
+            LOGGER.error("Error updating Fan Speed Setting on %s: %s", self.name, str(ex))
+
+    def updateInfo(self, polltype):
+        super().updateInfo(polltype)
+        self._updatei7Properties()
+
+    def query(self, command=None):
+        super().updateInfo()
+
+    def setBinFinish(self,command=None):
+        #Although method is not different than the BasicRoomba class, this needs to be defined so that it can be specified in "commands" 
+        super().setBinFinish(command)
+
+    def setPasses(self,command=None):
+        #Although method is not different than the BasicRoomba class, this needs to be defined so that it can be specified in "commands" 
+        super().setPasses(command)
+
+    def setEdgeClean(self,command=None):
+        #Although method is not different than the BasicRoomba class, this needs to be defined so that it can be specified in "commands" 
+        super().setEdgeClean(command)
+
+    def setFanSpeed(self,command=None): 
+        LOGGER.info('Received Command to set Fan Speed on %s: %s', self.name, str(command))
+        try:
+            _setting = int(command.get('value'))
+            #(0="", 1=Eco, 2=Automatic, 3=Performance)
+            if _setting == 1: #Eco
+                LOGGER.info('Setting %s fan speed to "Eco"', self.name)
+                self.roomba.set_preference("carpetBoost", "false")
+                self.roomba.set_preference("vacHigh", "false")
+            elif _setting == 2: #Automatic
+                LOGGER.info('Setting %s fan speed to "Automatic" (Carpet Boost Enabled)', self.name)
+                self.roomba.set_preference("carpetBoost", "true")
+                self.roomba.set_preference("vacHigh", "false")
+            elif _setting == 3: #Performance
+                LOGGER.info('Setting %s fan speed to "Perfomance" (High Fan Speed)', self.name)
+                self.roomba.set_preference("carpetBoost", "false")
+                self.roomba.set_preference("vacHigh", "true")
+        except Exception as ex:
+            LOGGER.error("Error setting Number of Passes on %s: %s", self.name, str(ex))
+
+    drivers = [{'driver': 'ST', 'value': 0, 'uom': 78}, #Running (On/Off)
+               {'driver': 'GV1', 'value': 0, 'uom': 25}, #State (Enumeration)
+               {'driver': 'GV2', 'value': 0, 'uom': 2}, #Connected (True/False)
+               {'driver': 'BATLVL', 'value': 0, 'uom': 51}, #Battery (percent)
+               {'driver': 'GV3', 'value': 0, 'uom': 2}, #Bin Present (True/False)
+               {'driver': 'GV4', 'value': 0, 'uom': 51}, #Wifi Signal (Percent)
+               {'driver': 'GV5', 'value': 0, 'uom': 20}, #RunTime (Hours)
+               {'driver': 'GV6', 'value': 0, 'uom':2}, #Error Active (True/False)
+               {'driver': 'ALARM', 'value': 0, 'uom':25}, #Current Error (Enumeration)
+               {'driver': 'GV7', 'value': 0, 'uom': 2}, #Bin Present (True/False)
+               {'driver': 'GV8', 'value': 0, 'uom': 25}, #Behavior on Full Bin (Enumeration - Finish/Continue)
+               {'driver': 'GV9', 'value': 0, 'uom': 56}, #X Position (Raw Value)
+               {'driver': 'GV10', 'value': 0, 'uom': 56}, #Y Position (Raw Value)
+               {'driver': 'ROTATE', 'value': 0, 'uom': 14}, #Theta (Degrees)
+               {'driver': 'GV11', 'value': 0, 'uom': 25}, #Passes Setting (Enumeration, One/Two/Automatic)
+               {'driver': 'GV12', 'value': 0, 'uom': 78}, #Edge Clean (On/Off)
+               {'driver': 'GV13', 'value': 0, 'uom': 25} #Fan Speed Setting (Enumeration)
+               ]
+    id = 'roombai7'
+    commands = {
+                    'DON': setOn, 'DOF': setOff, 'PAUSE': setPause, 'RESUME': setResume, 'DOCK': setDock, 'QUERY':query, 'SET_BIN_FINISH': setBinFinish, 'SET_PASSES': setPasses, 'SET_EDGE_CLEAN': setEdgeClean, 'SET_FAN_SPEED': setFanSpeed
+
 control = None
 polyglot = None
 robots = {}
@@ -733,7 +834,7 @@ def _getCapability(roomba, capability):
     but this will ensure it is 1 in order to report it has the capability
     '''
     try:
-        return roomba.master_state["state"]["reported"]["cap"][capability] == 1
+        return roomba.master_state["state"]["reported"]["cap"][capability] >= 1
     except:
         return False
 
@@ -805,9 +906,13 @@ async def addNodes(robots):
                 _hasPos = _getCapability(_roomba, 'pose')
                 _hasCarpetBoost = _getCapability(_roomba, 'carpetBoost')
                 _hasBinFullDetect = _getCapability(_roomba, 'binFullDetect')
+                _hasDockComm = _getCapability(_roomba, 'dockComm')
                 LOGGER.debug(f'Capabilities: Position: {_hasPos}, CarpetBoost: {_hasCarpetBoost}, BinFullDetection: {_hasBinFullDetect}')
 
-                if  _hasCarpetBoost:
+                if  _hasDockComm:
+                    LOGGER.info(f'Adding Roomba i7: {_name} ({_address})')
+                    polyglot.addNode(Roombai7(polyglot, _address, _address, _name, _roomba))
+                elif  _hasCarpetBoost:
                     LOGGER.info(f'Adding Roomba 980: {_name} ({_address})')
                     polyglot.addNode(Roomba980(polyglot, _address, _address, _name, _roomba))
                 elif _hasPos:
@@ -879,7 +984,7 @@ async def start():
 if __name__ == "__main__":
     try:
         polyglot = udi_interface.Interface([])
-        polyglot.start()
+        polyglot.start('2.0.4')
 
         customData = Custom(polyglot, 'customdata')
         #control = Controller(polyglot)
