@@ -5,6 +5,9 @@ CMD-ctl-DISCOVER-NAME = Re-Discover
 ST-ctl-ST-NAME = NodeServer Online
 
 # node names
+ND-roombai7-NAME = Series i7 Roomba
+ND-roombai7-ICON = MotionSensor
+
 ND-roomba980-NAME = Roomba 980
 ND-roomba980-ICON = MotionSensor
 
