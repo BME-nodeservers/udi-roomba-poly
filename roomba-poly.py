@@ -158,7 +158,7 @@ class BasicRoomba(udi_interface.Node):
         #GV1, States (Enumeration)
         try:
             _state = self.roomba.master_state["state"]["reported"]["cleanMissionStatus"]["phase"]
-            #LOGGER.debug('Current state on %s: %s', self.name, str(_state))
+            LOGGER.debug('Current state on %s: %s', self.name, str(_state))
             if _state in STATES:
                 self.setDriver('GV1', STATES[_state])
                 _running = (STATES[_state] in RUNNING_STATES)

@@ -669,7 +669,7 @@ class Roomba(object):
                 if self.pretty_print:
                     LOGGER.info("%-{:d}s : %s".format(self.master_indent) % (msg.topic, log_string))
                 else:
-                    LOGGER.info("Received Roomba Data: {}, {}".format(str(msg.topic), str(msg.payload)))
+                    LOGGER.info("Received Roomba {} Data: {}, {}".format(self.address, str(msg.topic), str(msg.payload)))
 
                 if self.raw:
                     self.publish(msg.topic, msg.payload)
