@@ -885,16 +885,19 @@ async def addNodes(robots):
 
         # Create a Roomba object and connect to robot
         _roomba = Roomba(robot['ip'], robot['blid'], robot['password'], roombaName=robot['robot_name'], log=LOGGER)
+        LOGGER.info(f'Connecting to robot ...')
         await _roomba.connect()
 
         while 'state' not in _roomba.master_state:
             LOGGER.info(f'Waiting for data to populate {_roomba.master_state}')
             await asyncio.sleep(5)
+        LOGGER.info(f'master state = {_roomba.mster_state}')
 
         # how long after connect do we need to wait for this?
         while 'reported' not in _roomba.master_state['state']:
             LOGGER.info(f'Waiting for data to populate {_roomba.master_state}')
             await asyncio.sleep(5)
+        LOGGER.info(f'master state = {_roomba.mster_state}')
 
         if len(_roomba.master_state["state"]["reported"]["cap"]) > 0:
             try:
