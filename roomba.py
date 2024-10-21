@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 '''
-Python 3.6 Program to connect to Roomba vacuum cleaners, dcode json, and forward to mqtt
+Python 3.7 Program to connect to Roomba vacuum cleaners, dcode json, and forward to mqtt
 server
 
 Nick Waterton 24th April 2017: V 1.0: Initial Release
@@ -32,14 +32,19 @@ Nick Waterton 19th April 2021 V2.0.0f: added set_ciphers('DEFAULT@SECLEVEL=1') t
 Nick Waterton 3rd May 2021 V2.0.0g: More python 3.8 fixes.
 Nick Waterton 7th May 2021 V2.0.0h: added "ignore_run" after mission complete as still geting bogus run states
 Nick Waterton 17th May 2021 V2.0.0i: mission state machine rework due to bogus states still being reported. increased max_distance to 500
+Nick Waterton 14th January 2022 V2.0.0j: Added ability to send json commands via mqtt for testing.
+Nick Waterton 17th June 2022 V2.0.0k: Added error 216 "Charging base bag full"
+Nick Waterton 12th jan 2023 V 2.0.1: Python 3.10 compatibility
+Nick Waterton 19th Jun 2024 V 2.0.2: Python 3.10 compatibility fixes and TLS fixes. Drop support for Python 3.6 and earlier
 '''
 
-__version__ = "2.0.0i"
+__version__ = "2.0.2"
 
 import asyncio
 from ast import literal_eval
 #from collections import OrderedDict, Mapping
-from collections import Mapping
+from collections.abc import Mapping
+from password import Password
 import datetime
 import json
 import math
@@ -56,6 +61,7 @@ import udi_interface
 
 LOGGER = udi_interface.LOGGER
 
+
 # Import trickery
 global HAVE_CV2
 global HAVE_MQTT
@@ -68,8 +74,6 @@ try:
     HAVE_MQTT = True
 except ImportError:
     print("paho mqtt client not found")
-
-'''
 try:
     import cv2
     import numpy as np
@@ -82,12 +86,18 @@ try:
     HAVE_PIL = True
 except ImportError:
     print("PIL module not found, maps are disabled")
-'''
+
+try:
+    # ANTIALIAS is deprecated and has been removed in Pillow 10.0.0
+    LANCZOS = Image.LANCZOS
+except AttributeError:
+    LANCZOS = Image.ANTIALIAS
+except NameError:
+    pass
     
 if sys.version_info < (3, 7):
     asyncio.get_running_loop = asyncio.get_event_loop
     
-
 transparent = (0, 0, 0, 0)  #transparent colour
 
 def make_transparent(image, colour=None):
@@ -117,12 +127,10 @@ class icons():
     '''
     def __init__(self, base_icon=None, angle=0, fnt=None, size=(50,50), log=None):
         #super().__init__()
-        '''
         if log:
             LOGGER = log
         else:
             LOGGER = logging.getLogger("Roomba.{}".format(__name__))
-        '''
         self.angle = angle
         self.fnt = fnt
         self.size = size
@@ -159,8 +167,7 @@ class icons():
         try:
             if not size:
                 size = self.size
-            icon = Image.open(filename).convert('RGBA').resize(
-                size,Image.ANTIALIAS)
+            icon = Image.open(filename).convert('RGBA').resize(size, LANCZOS)
             icon = make_transparent(icon)
             icon = icon.rotate(180-self.angle, expand=False)
             self.icons[name] = icon
@@ -211,7 +218,7 @@ class icons():
             size = self.size
             
         if icon_name in ['roomba', 'stuck', 'cancelled']:
-            icon = self.base_icon.copy().resize(size,Image.ANTIALIAS)
+            icon = self.base_icon.copy().resize(size, LANCZOS)
         else:
             icon = Image.new('RGBA', size, transparent)
         draw_icon = ImageDraw.Draw(icon)
@@ -383,6 +390,7 @@ class Roomba(object):
         120: "Battery not initialized",
         122: "Charging system error",
         123: "Battery not initialized",
+        216: "Charging base bag full",
     }
 
     def __init__(self, address=None, blid=None, password=None, topic="#",
@@ -396,12 +404,10 @@ class Roomba(object):
         '''
         self.loop = asyncio.get_event_loop()
         self.debug = False
-        '''
         if log:
             LOGGER = log
         else:
             LOGGER = logging.getLogger("Roomba.{}".format(roombaName if roombaName else __name__))
-        '''
         if LOGGER.getEffectiveLevel() == logging.DEBUG:
             self.debug = True
         self.address = address
@@ -412,6 +418,7 @@ class Roomba(object):
         self.password = password
         self.roombaName = roombaName
         self.file = file
+        self.get_passwd = Password(file=file)
         self.topic = topic
         self.webport = webport
         self.ws = None
@@ -453,7 +460,7 @@ class Roomba(object):
         self.max_sqft = None
         self.cb = None
         
-        self.is_connected = asyncio.Event(loop=self.loop)
+        self.is_connected = asyncio.Event()
         self.q = asyncio.Queue()
         self.command_q = asyncio.Queue()            
         self.loop.create_task(self.process_q())
@@ -488,6 +495,7 @@ class Roomba(object):
 
     def configure_roomba(self):
         LOGGER.info('configuring Roomba from file {}'.format(self.file))
+        self.roombas_config = self.get_passwd.get_roombas()
         for ip, roomba in self.roombas_config.items():
             if any([self.address==ip, self.blid==roomba['blid'], roomba['roomba_name']==self.roombaName]):
                 self.roombaName = roomba['roomba_name']
@@ -523,7 +531,9 @@ class Roomba(object):
             LOGGER.info("Setting TLS")
             try:
                 #self.client._ssl_context = None
-                context = ssl.SSLContext()
+                context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+                context.check_hostname = False
+                context.verify_mode = ssl.CERT_NONE
                 # Either of the following context settings works - choose one
                 # Needed for 980 and earlier robots as their security level is 1.
                 # context.set_ciphers('HIGH:!DH:!aNULL')
@@ -543,11 +553,7 @@ class Roomba(object):
         '''
         just create async_connect task
         '''
-        try:
-            cnt = self.loop.create_task(self.async_connect())
-            return cnt
-        except Exception as e:
-            LOGGER.error(f'create task failed: {e}')
+        return self.loop.create_task(self.async_connect())
 
     async def async_connect(self):
         '''
@@ -556,7 +562,6 @@ class Roomba(object):
         if not all([self.address, self.blid, self.password]):
             LOGGER.critical("Invalid address, blid, or password! All these "
                               "must be specified!")
-            LOGGER.critical("Invalid address, blid, or password! All these must be specified!")
             return False
         count = 0
         max_retries = 3
@@ -572,7 +577,6 @@ class Roomba(object):
                     self.client.loop_stop()
                     await self.loop.run_in_executor(None, self.client.reconnect)
                 self.client.loop_start()
-                LOGGER.info('Wait for MQTT on_connect to fire....')
                 await self.event_wait(self.is_connected, 1)    #wait for MQTT on_connect to fire (timeout 1 second)
             except (ConnectionRefusedError, OSError) as e:
                 if e.errno == 111:      #errno.ECONNREFUSED
@@ -612,7 +616,7 @@ class Roomba(object):
     async def _disconnect(self):
         #if self.ws:
         #    await self.ws.cancel()
-        tasks = [t for t in asyncio.Task.all_tasks() if t is not asyncio.Task.current_task()]
+        tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
         [task.cancel() for task in tasks]
         LOGGER.info("Cancelling {} outstanding tasks".format(len(tasks)))
         await asyncio.gather(*tasks, return_exceptions=True)
@@ -630,6 +634,7 @@ class Roomba(object):
         if rc == 0:
             self.connected(True)
             self.client.subscribe(self.topic)
+            self.client.subscribe("$SYS/#")
         else:
             LOGGER.error("Connected with result code {}".format(str(rc)))
             LOGGER.error("Please make sure your blid and password are "
@@ -669,7 +674,7 @@ class Roomba(object):
                 if self.pretty_print:
                     LOGGER.info("%-{:d}s : %s".format(self.master_indent) % (msg.topic, log_string))
                 else:
-                    LOGGER.info("Received Roomba {} Data: {}, {}".format(self.address, str(msg.topic), str(msg.payload)))
+                    LOGGER.info("Received Roomba Data: {}, {}".format(str(msg.topic), str(msg.payload)))
 
                 if self.raw:
                     self.publish(msg.topic, msg.payload)
@@ -773,6 +778,7 @@ class Roomba(object):
             client.subscribe(self.brokerCommand)
             client.subscribe(self.brokerSetting)
             client.subscribe(self.brokerCommand.replace('command','simulate'))
+            client.subscribe(self.brokerCommand.replace('command','json'))
             LOGGER.info('subscribed to {}, {}'.format(self.brokerCommand, self.brokerSetting))
 
     def broker_on_message(self, mosq, obj, msg):
@@ -785,6 +791,16 @@ class Roomba(object):
             LOGGER.info("Received SETTING: {}".format(payload))
             cmd = str(payload).split()
             self.set_preference(cmd[0], cmd[1])
+        elif "json" in msg.topic:
+            LOGGER.info("Received JSON: {}".format(payload))
+            try:
+                topic = msg.topic.split("/")[-1]
+                topic = topic if topic != self.roombaName else "delta"
+                cmd = json.dumps(json.loads(payload))
+                self.client.publish(topic, cmd)
+                LOGGER.info("Published to Roomba topic: {} json: {}".format(topic, cmd)) 
+            except Exception as e:
+                LOGGER.error("Error in json: {}".format(e))
         elif 'simulate' in msg.topic:
             LOGGER.info('received simulate command: {}'.format(payload))
             self.set_simulate(True)
@@ -929,7 +945,7 @@ class Roomba(object):
             val = False
         Command = {"state": {preference: val}}
         myCommand = json.dumps(Command)
-        LOGGER.info("Publishing Roomba {} Setting :{}s".format(self.roombaName, myCommand))
+        LOGGER.info("Publishing Roomba {} Setting :{}".format(self.roombaName, myCommand))
         self.client.publish("delta", myCommand)
     
     def _set_cleanSchedule(self, setting):
@@ -1183,22 +1199,16 @@ class Roomba(object):
         and a dict of the json data
         '''
         indent = self.master_indent + 31 #number of spaces to indent json data
-        json_data = {}
 
         try:
             # if it's json data, decode it (use OrderedDict to preserve keys
             # order), else return as is...
-            try:
-                json_data = json.loads(
-                    payload.decode("utf-8").replace(":nan", ":NaN").\
-                    replace(":inf", ":Infinity").replace(":-inf", ":-Infinity"))  #removed object_pairs_hook=OrderedDict
-            except Exception as e:
-                json_data = {}
-
+            json_data = json.loads(
+                payload.decode("utf-8").replace(":nan", ":NaN").\
+                replace(":inf", ":Infinity").replace(":-inf", ":-Infinity"))  #removed object_pairs_hook=OrderedDict
             # if it's not a dictionary, probably just a number
             if not isinstance(json_data, dict):
                 return json_data, dict(json_data)
-
             json_data_string = "\n".join((indent * " ") + i for i in \
                 (json.dumps(json_data, indent = 2)).splitlines())
 
@@ -2416,3 +2426,6 @@ class Roomba(object):
             merge_rotated = merge.rotate(180+self.angle, expand=True)
             self.save_image(merge_rotated, 'final_map.png')
                 
+if __name__ == '__main__':
+    from roomba_direct import main
+    main()
