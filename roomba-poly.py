@@ -871,6 +871,14 @@ def handleConfigDone():
 
     configured = True
 
+async def wait_for_state(_roomba):
+    while 'state' not in _roomba.master_state:
+        LOGGER.info(f'Waiting for data to populate {_roomba.master_state}')
+        await asyncio.sleep(1)
+
+    while 'reported' not in _roomba.master_state['state']:
+        await asyncio.sleep(1)
+
 async def addNodes(robots):
     global polyglot
     global aloop
@@ -889,16 +897,7 @@ async def addNodes(robots):
         LOGGER.info(f'Connecting to robot ...')
         await _roomba.connect()
 
-        while 'state' not in _roomba.master_state:
-            LOGGER.info(f'Waiting for data to populate {_roomba.master_state}')
-            await asyncio.sleep(5)
-        LOGGER.info(f'master state = {_roomba.mster_state}')
-
-        # how long after connect do we need to wait for this?
-        while 'reported' not in _roomba.master_state['state']:
-            LOGGER.info(f'Waiting for data to populate {_roomba.master_state}')
-            await asyncio.sleep(5)
-        LOGGER.info(f'master state = {_roomba.mster_state}')
+        await asyncio.create_task(wait_for_state(_roomba))
 
         if len(_roomba.master_state["state"]["reported"]["cap"]) > 0:
             LOGGER.info(f'Here is where we reall create the node')
