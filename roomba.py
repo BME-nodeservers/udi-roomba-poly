@@ -537,10 +537,11 @@ class Roomba(object):
                 context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
                 context.check_hostname = False
                 context.verify_mode = ssl.CERT_NONE
+                context.options |= 0x4
                 # Either of the following context settings works - choose one
                 # Needed for 980 and earlier robots as their security level is 1.
-                # context.set_ciphers('HIGH:!DH:!aNULL')
-                context.set_ciphers('DEFAULT@SECLEVEL=1')
+                context.set_ciphers('HIGH:!DH:!aNULL')
+                #context.set_ciphers('DEFAULT@SECLEVEL=1')
                 self.client.tls_set_context(context)
             except Exception as e:
                 LOGGER.exception("Error setting TLS: {}".format(e))
