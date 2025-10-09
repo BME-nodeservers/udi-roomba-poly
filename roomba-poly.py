@@ -875,7 +875,7 @@ async def addNodes(robots):
     global polyglot
     global aloop
 
-    LOGGER.info(f'addNodes: Discovery fround {len(robots)} robots!')
+    LOGGER.info(f'Discovery fround {len(robots)} robots!')
     for robot in robots.values():
         polyglot.Notices['setup'] = f'Initializing connection to {robot["robot_name"]}'
         LOGGER.info(f'Create a new node for {robot["robot_name"]} ...')
@@ -884,6 +884,7 @@ async def addNodes(robots):
         _address = 'rm' + robot['blid'][-10:].lower()
 
         # Create a Roomba object and connect to robot
+        LOGGER.info(f'Create Roomba Object')
         _roomba = Roomba(robot['ip'], robot['blid'], robot['password'], roombaName=robot['robot_name'], log=LOGGER)
         LOGGER.info(f'Connecting to robot ...')
         await _roomba.connect()
@@ -900,6 +901,7 @@ async def addNodes(robots):
         LOGGER.info(f'master state = {_roomba.mster_state}')
 
         if len(_roomba.master_state["state"]["reported"]["cap"]) > 0:
+            LOGGER.info(f'Here is where we reall create the node')
             try:
                 if polyglot.getNode(_address):
                     polyglot.getNode(_address).roomba = _roomba
@@ -913,6 +915,7 @@ async def addNodes(robots):
                 _hasDockComm = _getCapability(_roomba, 'dockComm')
                 LOGGER.debug(f'Capabilities: Position: {_hasPos}, CarpetBoost: {_hasCarpetBoost}, BinFullDetection: {_hasBinFullDetect}')
 
+                LOGGER.info(f'pick the right node class depending on capabilities')
                 if  _hasDockComm:
                     LOGGER.info(f'Adding Roomba i7: {_name} ({_address})')
                     polyglot.addNode(Roombai7(polyglot, _address, _address, _name, _roomba))
