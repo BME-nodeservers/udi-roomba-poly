@@ -461,7 +461,6 @@ class Roomba(object):
         self.max_sqft = None
         self.cb = None
         
-        LOGGER.info('ARE WE HERE?')
         self.is_connected = asyncio.Event()
         self.q = asyncio.Queue()
         self.command_q = asyncio.Queue()            
@@ -469,7 +468,6 @@ class Roomba(object):
         self.loop.create_task(self.process_command_q())
         self.update = self.loop.create_task(self.periodic_update())
 
-        LOGGER.info('OR ARE WE HERE?')
         if not all([self.address, self.blid, self.password]):
             if not self.configure_roomba():
                 LOGGER.critical('Could not configure Roomba')
