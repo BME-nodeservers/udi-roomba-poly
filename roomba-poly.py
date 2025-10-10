@@ -770,6 +770,7 @@ def getPassword(robot):
             server_socket,
             ssl_version=ssl.PROTOCOL_TLS,
             ciphers="DEFAULT@SECLEVEL=1",
+            0x04,
         )
 
         try:
