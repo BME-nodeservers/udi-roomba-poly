@@ -768,9 +768,9 @@ def getPassword(robot):
         server_socket.settimeout(10)
         ssl_socket = ssl.wrap_socket(
             server_socket,
+            0x04,
             ssl_version=ssl.PROTOCOL_TLS,
             ciphers="DEFAULT@SECLEVEL=1",
-            0x04,
         )
 
         try:
