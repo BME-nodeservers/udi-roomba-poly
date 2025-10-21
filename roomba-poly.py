@@ -748,7 +748,7 @@ def discover():
     LOGGER.error('Failed to discover any Roomba robots')
 
 
-def get_password_from_roomba(robot):
+def getPassword(robot):
     global polyglot
     polyglot.Notices['passwd'] = f'With the robot {robot["robot_name"]} at the base station, press and hold the Home button until the wi-fi light flashes'
 
@@ -1056,7 +1056,7 @@ async def start():
 if __name__ == "__main__":
     try:
         polyglot = udi_interface.Interface([])
-        polyglot.start('2.0.11')
+        polyglot.start('2.0.12')
 
         customData = Custom(polyglot, 'customdata')
         #control = Controller(polyglot)
