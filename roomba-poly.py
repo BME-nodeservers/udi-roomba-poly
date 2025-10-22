@@ -958,7 +958,7 @@ async def addNodes(robots):
         _address = 'rm' + robot['blid'][-10:].lower()
 
         # Create a Roomba object and connect to robot
-        LOGGER.info(f'Create Roomba Object')
+        LOGGER.info('Create Roomba Object {} {} {} {}'.format(robot['ip'], robot['blid'], robot['password'], robot['robot_name']))
         _roomba = Roomba(robot['ip'], robot['blid'], robot['password'], roombaName=robot['robot_name'], log=LOGGER)
         LOGGER.info(f'Connecting to robot ...')
         await _roomba.connect()
@@ -1056,7 +1056,7 @@ async def start():
 if __name__ == "__main__":
     try:
         polyglot = udi_interface.Interface([])
-        polyglot.start('2.0.12')
+        polyglot.start('2.0.13')
 
         customData = Custom(polyglot, 'customdata')
         #control = Controller(polyglot)
