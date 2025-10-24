@@ -776,7 +776,7 @@ def getPassword(robot):
     wrappedSocket = context.wrap_socket(sock)
         
     try:
-        LOGGER.info(f'Connecting to {robot["ip"]} on port {roomba_port}')
+        LOGGER.info(f'Connecting to {robot["ip"]} on port 8883')
         wrappedSocket.connect((robot['ip'], 8883))
         LOGGER.debug('Connection Successful')
         wrappedSocket.send(packet)
@@ -1056,7 +1056,7 @@ async def start():
 if __name__ == "__main__":
     try:
         polyglot = udi_interface.Interface([])
-        polyglot.start('2.0.13')
+        polyglot.start('2.0.14')
 
         customData = Custom(polyglot, 'customdata')
         #control = Controller(polyglot)
