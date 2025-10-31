@@ -951,7 +951,7 @@ async def addNodes(robots):
 
     LOGGER.info(f'Discovery fround {len(robots)} robots!')
     for robot in robots.values():
-        await polyglot.Notices['setup'] = f'Initializing connection to {robot["robot_name"]}'
+        polyglot.Notices['setup'] = f'Initializing connection to {robot["robot_name"]}'
         LOGGER.info(f'Create a new node for {robot["robot_name"]} ...')
 
         _name = robot['robot_name']
