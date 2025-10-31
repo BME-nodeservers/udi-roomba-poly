@@ -955,7 +955,9 @@ async def addNodes(robots):
         LOGGER.info(f'Create a new node for {robot["robot_name"]} ...')
 
         _name = robot['robot_name']
+        LOGGER.info('Robot name = {}'.format(_name))
         _address = 'rm' + robot['blid'][-10:].lower()
+        LOGGER.info('Robot address = {}'.format(_address))
 
         # Create a Roomba object and connect to robot
         LOGGER.info('Create Roomba Object {} {} {} {}'.format(robot['ip'], robot['blid'], robot['password'], robot['robot_name']))
