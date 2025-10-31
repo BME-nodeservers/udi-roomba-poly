@@ -959,7 +959,7 @@ async def addNodes(robots):
 
         # Create a Roomba object and connect to robot
         LOGGER.info('Create Roomba Object {} {} {} {}'.format(robot['ip'], robot['blid'], robot['password'], robot['robot_name']))
-        await _roomba = Roomba(robot['ip'], robot['blid'], robot['password'], roombaName=robot['robot_name'], log=LOGGER)
+        _roomba = await Roomba(robot['ip'], robot['blid'], robot['password'], roombaName=robot['robot_name'], log=LOGGER)
         LOGGER.info(f'Connecting to robot ...')
         await _roomba.connect()
 
