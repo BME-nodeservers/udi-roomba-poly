@@ -951,16 +951,16 @@ async def addNodes(robots):
 
     LOGGER.info(f'Discovery fround {len(robots)} robots!')
     for robot in robots.values():
-        polyglot.Notices['setup'] = f'Initializing connection to {robot["robot_name"]}'
-        LOGGER.info(f'Create a new node for {robot["robot_name"]} ...')
+        await polyglot.Notices['setup'] = f'Initializing connection to {robot["robot_name"]}'
+        await LOGGER.info(f'Create a new node for {robot["robot_name"]} ...')
 
-        _name = robot['robot_name']
-        _address = 'rm' + robot['blid'][-10:].lower()
+        await _name = robot['robot_name']
+        await _address = 'rm' + robot['blid'][-10:].lower()
 
         # Create a Roomba object and connect to robot
-        LOGGER.info('Create Roomba Object {} {} {} {}'.format(robot['ip'], robot['blid'], robot['password'], robot['robot_name']))
-        _roomba = Roomba(robot['ip'], robot['blid'], robot['password'], roombaName=robot['robot_name'], log=LOGGER)
-        LOGGER.info(f'Connecting to robot ...')
+        await LOGGER.info('Create Roomba Object {} {} {} {}'.format(robot['ip'], robot['blid'], robot['password'], robot['robot_name']))
+        await _roomba = Roomba(robot['ip'], robot['blid'], robot['password'], roombaName=robot['robot_name'], log=LOGGER)
+        await LOGGER.info(f'Connecting to robot ...')
         await _roomba.connect()
 
         await asyncio.create_task(wait_for_state(_roomba))
