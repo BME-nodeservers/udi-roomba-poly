@@ -952,6 +952,7 @@ async def addNodes(robots):
     LOGGER.info(f'Discovery fround {len(robots)} robots!')
     for robot in robots.values():
         polyglot.Notices['setup'] = f'Initializing connection to {robot["robot_name"]}'
+        await asyncio.sleep(2)
         LOGGER.info(f'Create a new node for {robot["robot_name"]} ...')
 
         _name = robot['robot_name']
@@ -1058,7 +1059,7 @@ async def start():
 if __name__ == "__main__":
     try:
         polyglot = udi_interface.Interface([])
-        polyglot.start('2.0.15')
+        polyglot.start('2.0.16')
 
         customData = Custom(polyglot, 'customdata')
         #control = Controller(polyglot)
