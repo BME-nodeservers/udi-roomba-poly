@@ -1064,7 +1064,7 @@ async def start():
 if __name__ == "__main__":
     try:
         polyglot = udi_interface.Interface([])
-        polyglot.start('2.0.16')
+        polyglot.start('2.0.17')
 
         customData = Custom(polyglot, 'customdata')
         #control = Controller(polyglot)
