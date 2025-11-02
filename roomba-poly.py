@@ -761,56 +761,59 @@ def getPassword(robot):
     This is is 0xf0 (mqtt RESERVED) length (0x23 = 35) 0xefcc3b2900 (magic packet), 
     followed by 0xXXXX... (30 bytes of password). so 7 bytes, followed by 30 bytes of password
     total of 37 bytes
-    Uses 10 second timeout for socket connection
+    Uses 20 second timeout for socket connection
     '''
     data = b''
     packet = bytes.fromhex('f005efcc3b2900')
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(20)
+
+    while True:
+        LOGGER.info(f'start password discovery')
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(20)
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+        context.options |= 0x4
+        context.set_ciphers('HIGH:!DH:!aNULL')
+        wrappedSocket = context.wrap_socket(sock)
         
-    #context = ssl.SSLContext(ssl.PROTOCOL_TLS)
-    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    #context.set_ciphers('DEFAULT@SECLEVEL=1:HIGH:!DH:!aNULL')
-    context.check_hostname = False
-    context.verify_mode = ssl.CERT_NONE
-    context.options |= 0x4
-    context.set_ciphers('HIGH:!DH:!aNULL')
-    wrappedSocket = context.wrap_socket(sock)
+        try:
+            LOGGER.info(f'Connecting to {robot["ip"]} on port 8883')
+            wrappedSocket.connect((robot['ip'], 8883))
+            LOGGER.debug('Connection Successful')
+            wrappedSocket.send(packet)
+            LOGGER.info('Waiting for response from robot')
         
-    try:
-        LOGGER.info(f'Connecting to {robot["ip"]} on port 8883')
-        wrappedSocket.connect((robot['ip'], 8883))
-        LOGGER.debug('Connection Successful')
-        wrappedSocket.send(packet)
-        LOGGER.info('Waiting for response from robot')
-        
-        while len(data) < 37:
-            data_received = wrappedSocket.recv(1024)
-            data+= data_received
-            if len(data_received) == 0:
-                LOGGER.debug("socket closed")
-                break
+            while len(data) < 37:
+                data_received = wrappedSocket.recv(1024)
+                data+= data_received
+                if len(data_received) == 0:
+                    LOGGER.debug("socket closed")
+                    break
                 
-        password = str(data[7:].decode().rstrip("\x00"))
-        if password != '':
-            robot['password'] = password
-            LOGGER.info(f'Found password {password}')
+            if len(data_received) != 0:
+                password = str(data[7:].decode().rstrip("\x00"))
+                if password != '':
+                    robot['password'] = password
+                    LOGGER.info(f'Found password {password}')
+
+                wrappedSocket.close()
+                return
+            
+        except socket.timeout as e:
+            LOGGER.error('Connection Timeout Error (for {}): {}'.format(robot['ip'], e))
+        except (ConnectionRefusedError, OSError) as e:
+            if e.errno == 111:      #errno.ECONNREFUSED
+                LOGGER.error('Unable to Connect to roomba at ip {}, make sure nothing else is connected (app?), '
+               'as only one connection at a time is allowed'.format(robot['ip']))
+            elif e.errno == 113:    #errno.No Route to Host
+                LOGGER.error('Unable to contact roomba on ip {} is the ip correct?'.format(robot['ip']))
+            else:
+                LOGGER.error("Connection Error (for {}): {}".format(robot['ip'], e))
+        except Exception as e:
+            LOGGER.exception(e)
 
         wrappedSocket.close()
-        return
-            
-    except socket.timeout as e:
-        LOGGER.error('Connection Timeout Error (for {}): {}'.format(robot['ip'], e))
-    except (ConnectionRefusedError, OSError) as e:
-        if e.errno == 111:      #errno.ECONNREFUSED
-            LOGGER.error('Unable to Connect to roomba at ip {}, make sure nothing else is connected (app?), '
-               'as only one connection at a time is allowed'.format(robot['ip']))
-        elif e.errno == 113:    #errno.No Route to Host
-            LOGGER.error('Unable to contact roomba on ip {} is the ip correct?'.format(robot['ip']))
-        else:
-            LOGGER.error("Connection Error (for {}): {}".format(robot['ip'], e))
-    except Exception as e:
-        LOGGER.exception(e)
 
     LOGGER.error('Unable to get password from roomba')
 
