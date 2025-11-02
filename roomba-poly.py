@@ -752,6 +752,8 @@ def getPassword(robot):
     global polyglot
     polyglot.Notices['passwd'] = f'With the robot {robot["robot_name"]} at the base station, press and hold the Home button until the wi-fi light flashes'
 
+    # seems like we should wait here for user to press and hold the button
+
     '''
     Send MQTT magic packet to addr
     this is 0xf0 (mqtt reserved) 0x05(data length) 0xefcc3b2900 (data)
@@ -764,7 +766,7 @@ def getPassword(robot):
     data = b''
     packet = bytes.fromhex('f005efcc3b2900')
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(10)
+    sock.settimeout(20)
         
     #context = ssl.SSLContext(ssl.PROTOCOL_TLS)
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
